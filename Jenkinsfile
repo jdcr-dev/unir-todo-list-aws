@@ -31,10 +31,10 @@ pipeline {
                     }
                     
                     sh """
-                        flake8 --exit-zero --format=pylint ${FOLDER_STATIC_TEST} > flake8.out
+                        flake8 --exit-zero --format=pylint ${FOLDER_STATIC_TEST} > test/flake8.out
                     """
                     
-                    recordIssues tools: [flake8(name: 'Flake8', pattern: 'flake8.out')], 
+                    recordIssues tools: [flake8(name: 'Flake8', pattern: 'test/flake8.out')], 
                         qualityGates:[
                             [threshold: 8, type: 'TOTAL', unstable: false], 
                             [threshold: 10, type:'TOTAL', unstable: false]],
@@ -42,10 +42,10 @@ pipeline {
                     
      
                     sh """
-                        bandit -r ${FOLDER_STATIC_TEST} -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}" | echo "Bandit finished"
+                        bandit -r ${FOLDER_STATIC_TEST} -f custom -o test/bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}" | echo "Bandit finished"
                     """
                     
-                    recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], 
+                    recordIssues tools: [pyLint(name: 'Bandit', pattern: 'test/bandit.out')], 
                         qualityGates:[
                             [threshold: 2, type: 'TOTAL', unstable: false], 
                             [threshold: 4, type:'TOTAL', unstable: false]],
@@ -92,16 +92,24 @@ pipeline {
             steps {
                 sh '''
                     export PYTHONPATH=.
-                    pytest --junitxml=result-rest.xml test/integration/todoApiTest.py
+                    pytest --junitxml=test/result-rest.xml test/integration/todoApiTest.py
                 '''
-                junit 'result*.xml'
+                junit 'test/result*.xml'
             }
         }
         
         stage('Promote') {
             steps {
+                script {
+                    def gitUrlWithAuth = "${env.GIT_URL}".replaceAll("https://", "https://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@")
+                        
+                    // Set Git remote URL using 'git remote set-url'
+                    sh "git remote set-url origin ${gitUrlWithAuth}"
+                }
+                
+                // git remote set-url origin https://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@github.com/jdcr-dev/unir-todo-list-aws.git
                 sh '''
-                    git remote set-url origin https://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@github.com/jdcr-dev/unir-todo-list-aws.git
+                    
                     
                     git checkout master
                     git pull origin master
@@ -136,4 +144,5 @@ pipeline {
             cleanWs()
         }
     }
+    
 }

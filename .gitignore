@@ -2,6 +2,7 @@
 __pycache__/
 .git
 tests
+test
 pyenvunittests
 .coverage
 coverage.xml

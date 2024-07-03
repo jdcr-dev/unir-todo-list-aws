@@ -1,1 +1,120 @@
 
+pipeline {
+    agent any    
+    
+    environment {
+        STASH_CODE = 'CODE'
+        AWS_REGION = 'us-east-1'
+        STACK_NAME = 'todo-list-aws'
+        TEMPLATE_FILE = 'template.yaml'
+        CAPABILITIES = 'CAPABILITY_IAM'
+        GIT_URL = 'https://github.com/jdcr-dev/unir-todo-list-aws.git'
+        GIT_TOKEN = 'GIT_HUB_TOKEN'
+    }
+    
+    
+    stages {
+        
+        stage('Get Code') {
+            steps {
+                
+                echo "Running on agent: ${env.NODE_NAME}"
+                echo "Build stage is running in workspace: ${env.WORKSPACE}"
+                echo "Current stage: ${env.STAGE_NAME}"
+                
+                git branch: 'master', 
+                    credentialsId: GIT_TOKEN,
+                    url: GIT_URL
+                    
+                stash name: STASH_CODE, includes: '**/*, .git/**/*'
+            }
+        }
+        
+        stage('Deploy') {
+            agent { label 'static-agent' }
+            steps {
+                
+                script {
+                    unstash STASH_CODE
+                    
+                    echo "Running on agent: ${env.NODE_NAME}"
+                    echo "Build stage is running in workspace: ${env.WORKSPACE}"
+                    echo "Current stage: ${env.STAGE_NAME}"
+                    
+                    sh """
+                        sam validate --template-file ${TEMPLATE_FILE} --region ${AWS_REGION}
+                        
+                        sam build
+                        
+                        sam deploy --template-file ${TEMPLATE_FILE} \
+                                   --stack-name ${STACK_NAME} \
+                                   --region ${AWS_REGION} \
+                                   --parameter-overrides Stage=staging \
+                                   --capabilities ${CAPABILITIES} \
+                                   --no-confirm-changeset \
+                                   --debug \
+                                   --no-fail-on-empty-changeset
+                    """
+                    
+                    def output_Base_URL = sh(script: """
+                        aws cloudformation describe-stacks --stack-name ${STACK_NAME} --query "Stacks[0].Outputs[?OutputKey=='BaseUrlApi'].OutputValue" --output text
+                    """, returnStdout: true).trim()
+                    
+                    echo "Raw output: ${output_Base_URL}"
+                    
+                    env.BASE_URL = output_Base_URL // Asi lo tenia antes pero en teoria esto no sirve para pasarlo entre agentes aunque no he sido capaz de reproducirlo
+                    def baseUrl = output_Base_URL
+                    writeFile file: 'baseUrl.txt', text: baseUrl
+
+                    // Guardamos el fichero para que este accesible desde cualquier agente
+                    stash name: 'baseUrl_Stash', includes: 'baseUrl.txt'
+                                        
+                    sh """ 
+                        echo "[SO] - LA URL RECUPERADA ES: ${BASE_URL}"
+                    """
+                }
+            }
+        }
+        
+        stage('Rest Test') {
+            agent { label 'api-agent' }
+            steps {
+                script {
+                    unstash STASH_CODE
+                    unstash 'baseUrl_Stash'
+                    
+                    def baseURL = readFile 'baseUrl.txt'
+                    echo "Valor url desde otro agente: ${baseURL}"
+                    env.BASE_URL = baseURL;
+
+                    sh 'rm baseUrl.txt'
+
+                    echo "Running on agent: ${env.NODE_NAME}"
+                    echo "Build stage is running in workspace: ${env.WORKSPACE}"
+                    echo "Current stage: ${env.STAGE_NAME}"
+                    
+                    sh '''
+                        export PYTHONPATH=.
+                        pytest --junitxml=test/result-rest.xml test/integration/todoApiTest.py
+                    '''
+                    junit 'test/result*.xml'
+                }
+            }
+        }
+    }
+    
+    
+    
+    
+    
+    post {
+        always {
+            // En ocasiones no me borra el workspace y me sale un error, en otras no lo borra y no sale error, pense que podria ser que con una espera se solucionara pero no hubo forma
+            sleep(time: 10, unit: 'SECONDS')
+            cleanWs()
+        }
+    }
+    
+    
+    
+}

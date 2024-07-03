@@ -108,8 +108,7 @@ pipeline {
 
                     // Guardamos el fichero para que este accesible desde cualquier agente
                     stash name: 'baseUrl_Stash', includes: 'baseUrl.txt'
-                    
-                    
+                                        
                     sh """ 
                         echo "[SO] - LA URL RECUPERADA ES: ${BASE_URL}"
                     """
@@ -127,7 +126,9 @@ pipeline {
                     def baseURL = readFile 'baseUrl.txt'
                     echo "Valor url desde otro agente: ${baseURL}"
                     env.BASE_URL = baseURL;
-                        
+
+                    sh 'rm baseUrl.txt'
+
                     echo "Running on agent: ${env.NODE_NAME}"
                     echo "Build stage is running in workspace: ${env.WORKSPACE}"
                     echo "Current stage: ${env.STAGE_NAME}"
@@ -148,7 +149,7 @@ pipeline {
                     
                     // Al hacer el unstash no me traia el directorio .git asi que he tenido que volver a clonarlo no veo otra forma
                     //unstash STASH_CODE
-                    
+                
                     git branch: 'develop', 
                         credentialsId: GIT_TOKEN,
                         url: GIT_URL

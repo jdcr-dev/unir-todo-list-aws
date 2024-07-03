@@ -177,12 +177,15 @@ pipeline {
 
                     # Restauramos el Jenkisfile que original de la rama
                     git checkout -- Jenkinsfile
+                    
+                    git reset HEAD Jenkinsfile_agentes
+                    git checkout -- Jenkinsfile_agentes
 
-                    # Stage all other changes
+                    # Añadimos cambios para el commit
                     git add .
 
                     # Creamos el comit del merge
-                    git commit -m "Merged DEVELOP into MASTER, excluding Jenkinsfile"
+                    git commit -m "Merged DEVELOP into MASTER, excluding Jenkinsfile and Jenkisfile_agentes"
                     
                     # Subimos los cambios
                     git push
